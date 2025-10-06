@@ -1,0 +1,31 @@
+# /etc/ipsec.conf
+config setup
+  uniqueids = never
+
+conn edgetunnel
+  keyexchange={{ ipsec.keyexchange }}
+  type=tunnel
+  auto=start
+  dpdaction=restart
+  dpddelay={{ ipsec.dpd_delay }}
+  dpdtimeout={{ ipsec.dpd_timeout }}
+  ikelifetime=1h
+  lifetime=8h
+  rekeymargin=3m
+  keyingtries=%forever
+  ike={{ ipsec.ike_proposal }}
+  esp={{ ipsec.esp_proposal }}
+
+  left=%any
+  leftid={{ local_id }}
+  leftsubnet={{ local_lan_cidr }}
+  leftauth=psk
+  leftfirewall=yes
+
+  right={{ peer_ip }}
+  rightid={{ peer_id }}
+  rightsubnet={{ peer_lan_cidr }}
+  rightauth=psk
+
+  fragmentation=yes
+  mobike=yes

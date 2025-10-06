@@ -1,0 +1,167 @@
+- name: Ensure apt cache is updated
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install StrongSwan and FRR
+  apt:
+    name:
+      - strongswan
+      - strongswan-pki
+      - frr
+      - frr-pythontools
+    state: present
+
+- name: Enable IPv4 forwarding (runtime and persistent)
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Relax reverse path filtering (recommended for multi-homed routers)
+  sysctl:
+    name: net.ipv4.conf.all.rp_filter
+    value: "2"
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Render strongswan.conf
+  template:
+    src: strongswan.conf.j2
+    dest: /etc/strongswan.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart strongswan
+
+- name: Render ipsec.conf
+  template:
+    src: ipsec.conf.j2
+    dest: /etc/ipsec.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart strongswan
+
+- name: Render ipsec.secrets
+  template:
+    src: ipsec.secrets.j2
+    dest: /etc/ipsec.secrets
+    owner: root
+    group: root
+    mode: "0600"
+  notify: restart strongswan
+
+- name: Enable and start StrongSwan
+  service:
+    name: strongswan-starter
+    state: started
+    enabled: yes
+
+# FRR
+- name: Enable zebra and bgpd daemons
+  lineinfile:
+    path: /etc/frr/daemons
+    regexp: '^({{ item.name }})=no'
+    line: '\\1=yes'
+    backrefs: yes
+  loop:
+    - { name: 'zebra' }
+    - { name: 'bgpd' }
+  notify: restart frr
+
+- name: Ensure vtysh.conf exists and has proper perms
+  copy:
+    dest: /etc/frr/vtysh.conf
+    content: "service integrated-vtysh-config\\n"
+    owner: frr
+    group: frr
+    mode: "0640"
+
+- name: Add current user to frrvty group (optional)
+  user:
+    name: "{{ ansible_user | default('azureuser') }}"
+    groups: frrvty
+    append: yes
+
+- name: Render bgpd.conf
+  template:
+    src: bgpd.conf.j2
+    dest: /etc/frr/bgpd.conf
+    owner: frr
+    group: frr
+    mode: "0640"
+  notify: restart frr
+
+- name: Ensure FRR is enabled and running
+  service:
+    name: frr
+    state: started
+    enabled: yes
+
+# --- Test IP injection on LAN (runtime + persistent) ---
+- name: "Add LAN test IP | skip if disabled"
+  when: test_ip_enabled | default(false) | bool
+  block:
+    - name: Ensure LAN interface exists
+      command: ip link show {{ lan_iface }}
+      register: lan_iface_check
+      changed_when: false
+
+    - name: Add test IP at runtime if missing
+      shell: |
+        if ip addr show dev {{ lan_iface }} | grep -q '{{ test_ip }}'; then
+          echo "present"
+        else
+          ip addr add {{ test_ip }} dev {{ lan_iface }}
+          echo "added"
+        fi
+      register: add_ip_runtime
+      changed_when: "'added' in add_ip_runtime.stdout"
+
+    - name: Install persistent script
+      copy:
+        dest: /usr/local/sbin/add-test-ip.sh
+        mode: '0755'
+        owner: root
+        group: root
+        content: |
+          #!/usr/bin/env bash
+          set -e
+          IF="{{ lan_iface }}"
+          IP="{{ test_ip }}"
+          if ip addr show dev "$IF" | grep -q "$IP"; then
+            exit 0
+          else
+            ip addr add "$IP" dev "$IF"
+          fi
+
+    - name: Install systemd unit to apply test IP at boot
+      copy:
+        dest: /etc/systemd/system/add-test-ip.service
+        mode: '0644'
+        owner: root
+        group: root
+        content: |
+          [Unit]
+          Description=Add LAN test IP
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/add-test-ip.sh
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable and start persistence unit
+      systemd:
+        name: add-test-ip.service
+        enabled: yes
+        state: started
+

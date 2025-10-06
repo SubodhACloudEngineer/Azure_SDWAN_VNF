@@ -1,0 +1,9 @@
+- name: restart strongswan
+  service:
+    name: strongswan-starter
+    state: restarted
+
+- name: restart frr
+  service:
+    name: frr
+    state: restarted

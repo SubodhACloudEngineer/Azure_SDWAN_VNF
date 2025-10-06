@@ -1,0 +1,7 @@
+- name: Configure StrongSwan IPSec and FRR BGP on SD-WAN edges
+  hosts: sdwan_edges
+  become: true
+  gather_facts: yes
+
+  roles:
+    - sdwan_edge

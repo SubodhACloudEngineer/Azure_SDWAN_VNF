@@ -1,0 +1,16 @@
+local_asn: 65010
+local_lan_cidr: 10.0.2.0/24
+local_id: site-east
+wan_ip: "{{ ansible_host }}"
+
+peer_asn: 65020
+peer_ip: "{{ hostvars['site-west'].ansible_host }}"
+peer_id: site-west
+peer_lan_cidr: 10.1.2.0/24
+
+ipsec_psk: "SuperSecretSharedKey123!"
+
+lan_iface: eth1                 # your LAN NIC (confirm with `ip -br a`)
+test_ip_enabled: true
+test_ip: 10.0.2.10/24           # must sit inside local_lan_cidr (10.0.2.0/24)
+

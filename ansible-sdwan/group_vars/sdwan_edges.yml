@@ -1,0 +1,12 @@
+# Common IPSec parameters for all edges
+ipsec:
+  keyexchange: ikev2
+  ike_proposal: aes256-sha256-modp2048
+  esp_proposal: aes256-sha256
+  dpd_delay: 10s
+  dpd_timeout: 30s
+
+# Common BGP timers
+bgp:
+  keepalive: 60
+  holdtime: 180
