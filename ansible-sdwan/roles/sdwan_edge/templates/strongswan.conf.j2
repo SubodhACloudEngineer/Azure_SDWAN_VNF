@@ -1,0 +1,9 @@
+# /etc/strongswan/strongswan.conf
+charon {
+  install_routes = yes
+  dns1 = 1.1.1.1
+  plugins {
+    stroke {}
+    updown {}
+  }
+}

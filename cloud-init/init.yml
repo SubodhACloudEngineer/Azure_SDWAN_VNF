@@ -1,0 +1,6 @@
+#cloud-config
+packages:
+  - strongswan
+  - frr
+runcmd:
+  - sysctl -w net.ipv4.ip_forward=1

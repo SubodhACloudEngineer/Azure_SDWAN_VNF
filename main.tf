@@ -1,25 +1,27 @@
-resource "azurerm_resource_group" "rg" {
-  name     = var.resource_group_name
-  location = var.location
+module "network" {
+  source   = "./modules/network"
+  for_each = var.sites
+
+  location            = each.value.location
+  resource_group_name = each.value.resource_group_name
+  name_prefix         = each.value.name_prefix
+  vnet_cidr           = each.value.vnet_cidr
+  lan_cidr            = each.value.lan_cidr
+  wan_cidr            = each.value.wan_cidr
+
 }
 
-resource "azurerm_virtual_network" "vnet" {
-  name                = "vnet-sdwan"
-  address_space       = ["10.0.0.0/16"]
-  location            = var.location
-  resource_group_name = azurerm_resource_group.rg.name
+module "vm" {
+  source   = "./modules/vm"
+  for_each = var.sites
+
+  location            = each.value.location
+  resource_group_name = module.network[each.key].resource_group_name
+  subnet_wan_id       = module.network[each.key].subnet_wan_id
+  subnet_lan_id       = module.network[each.key].subnet_lan_id
+  vm_admin_username   = var.vm_admin_username
+  vm_size             = var.vm_size
+  ssh_public_key      = var.ssh_public_key
+  name_prefix         = each.value.name_prefix
 }
 
-resource "azurerm_subnet" "wan" {
-  name                 = "wan-subnet"
-  address_prefixes     = ["10.0.1.0/24"]
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.vnet.name
-}
-
-resource "azurerm_subnet" "lan" {
-  name                 = "lan-subnet"
-  address_prefixes     = ["10.0.2.0/24"]
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.vnet.name
-}
