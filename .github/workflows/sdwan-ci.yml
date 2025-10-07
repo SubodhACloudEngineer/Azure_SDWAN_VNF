@@ -1,0 +1,56 @@
+name: sdwan-ci
+on:
+  pull_request:
+    paths: ["Azure_SDWAN_VNF/**", "Azure_SDWAN_VNF/ansible-sdwan/**"]
+  push:
+    branches: ["main"]
+
+env:
+  TF_DIR: Azure_SDWAN_VNF
+  ANS_DIR: Azure_SDWAN_VNF/ansible-sdwan
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: |
+          terraform -chdir=$TF_DIR init -input=false
+          terraform -chdir=$TF_DIR fmt -check
+          terraform -chdir=$TF_DIR validate
+          terraform -chdir=$TF_DIR plan -out=tfplan
+      - uses: actions/upload-artifact@v4
+        with: { name: tfplan, path: ${{ env.TF_DIR }}/tfplan }
+
+  deploy:
+    needs: plan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging   # <- approval gate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Apply Terraform
+        run: |
+          terraform -chdir=$TF_DIR init -input=false
+          terraform -chdir=$TF_DIR apply -auto-approve tfplan || terraform -chdir=$TF_DIR apply -auto-approve
+      - name: Generate Ansible inventory & configure
+        run: |
+          bash $TF_DIR/gen_inventory.sh
+          sudo apt-get update && sudo apt-get install -y ansible jq
+          ansible -i $ANS_DIR/inventory/hosts.yml sdwan_edges -m ping
+          ansible-playbook -i $ANS_DIR/inventory/hosts.yml $ANS_DIR/site.yml
+      - name: Verify IPSec tunnel
+        run: ansible -i $ANS_DIR/inventory/hosts.yml sdwan_edges -b -m shell -a \
+          'ipsec statusall | grep -q "CHILD_SA .* INSTALLED"'
+
+      # CMDB-lite export (artifacts)
+      - name: Export deployment record
+        run: |
+          mkdir -p cmdb
+          terraform -chdir=$TF_DIR output -json > cmdb/terraform-outputs.json
+          date -u +%Y-%m-%dT%H:%M:%SZ > cmdb/deploy_timestamp.txt
+          ansible -i $ANS_DIR/inventory/hosts.yml sdwan_edges -b -m shell -a 'ipsec version || true; vtysh -c "show version" || true' > cmdb/versions.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: cmdb-record, path: cmdb/ }
