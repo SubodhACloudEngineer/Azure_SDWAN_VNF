@@ -1,13 +1,15 @@
 name: sdwan-ci
 on:
   pull_request:
-    paths: ["Azure_SDWAN_VNF/**", "Azure_SDWAN_VNF/ansible-sdwan/**"]
+    paths:
+      - "**/*.tf"
+      - "ansible-sdwan/**"
   push:
     branches: ["main"]
 
 env:
-  TF_DIR: Azure_SDWAN_VNF
-  ANS_DIR: Azure_SDWAN_VNF/ansible-sdwan
+  TF_DIR: .
+  ANS_DIR: ansible-sdwan
 
 jobs:
   plan:
