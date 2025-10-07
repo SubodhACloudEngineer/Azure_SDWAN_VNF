@@ -13,44 +13,70 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-      - run: |
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init/validate/plan
+        run: |
           terraform -chdir=$TF_DIR init -input=false
           terraform -chdir=$TF_DIR fmt -check
           terraform -chdir=$TF_DIR validate
           terraform -chdir=$TF_DIR plan -out=tfplan
-      - uses: actions/upload-artifact@v4
-        with: { name: tfplan, path: ${{ env.TF_DIR }}/tfplan }
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_DIR }}/tfplan
 
   deploy:
     needs: plan
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: staging   # <- approval gate
+    # This is the environment approval gate (configure "staging" in repo settings)
+    environment: staging
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-      - name: Apply Terraform
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform apply
         run: |
           terraform -chdir=$TF_DIR init -input=false
-          terraform -chdir=$TF_DIR apply -auto-approve tfplan || terraform -chdir=$TF_DIR apply -auto-approve
-      - name: Generate Ansible inventory & configure
+          # Try to apply the uploaded plan; if missing (e.g. re-run), apply directly
+          if [ -f "$TF_DIR/tfplan" ]; then
+            terraform -chdir=$TF_DIR apply -auto-approve tfplan
+          else
+            terraform -chdir=$TF_DIR apply -auto-approve
+          fi
+
+      - name: Configure with Ansible
         run: |
           bash $TF_DIR/gen_inventory.sh
           sudo apt-get update && sudo apt-get install -y ansible jq
           ansible -i $ANS_DIR/inventory/hosts.yml sdwan_edges -m ping
           ansible-playbook -i $ANS_DIR/inventory/hosts.yml $ANS_DIR/site.yml
-      - name: Verify IPSec tunnel
-        run: ansible -i $ANS_DIR/inventory/hosts.yml sdwan_edges -b -m shell -a \
-          'ipsec statusall | grep -q "CHILD_SA .* INSTALLED"'
 
-      # CMDB-lite export (artifacts)
-      - name: Export deployment record
+      - name: Verify IPSec tunnel
+        run: |
+          ansible -i $ANS_DIR/inventory/hosts.yml sdwan_edges -b \
+            -m shell -a 'ipsec statusall | grep -q "CHILD_SA .* INSTALLED"'
+
+      - name: Export CMDB-lite
         run: |
           mkdir -p cmdb
           terraform -chdir=$TF_DIR output -json > cmdb/terraform-outputs.json
           date -u +%Y-%m-%dT%H:%M:%SZ > cmdb/deploy_timestamp.txt
-          ansible -i $ANS_DIR/inventory/hosts.yml sdwan_edges -b -m shell -a 'ipsec version || true; vtysh -c "show version" || true' > cmdb/versions.txt
-      - uses: actions/upload-artifact@v4
-        with: { name: cmdb-record, path: cmdb/ }
+          ansible -i $ANS_DIR/inventory/hosts.yml sdwan_edges -b -m shell -a \
+            'ipsec version || true; vtysh -c "show version" || true' > cmdb/versions.txt
+
+      - name: Upload CMDB-lite artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmdb-record
+          path: cmdb/
