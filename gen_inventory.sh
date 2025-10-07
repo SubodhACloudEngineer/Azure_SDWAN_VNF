@@ -5,7 +5,7 @@ OUT_JSON=$(terraform output -json public_ips)
 EAST_IP=$(echo "$OUT_JSON" | jq -r '.east')
 WEST_IP=$(echo "$OUT_JSON" | jq -r '.west')
 
-ANSIBLE_DIR="../ansible-sdwan"   # <-- write to sibling folder
+ANSIBLE_DIR="ansible-sdwan"   # <-- write to sibling folder
 mkdir -p "$ANSIBLE_DIR/inventory"
 
 cat > "$ANSIBLE_DIR/inventory/hosts.yml" <<EOF
