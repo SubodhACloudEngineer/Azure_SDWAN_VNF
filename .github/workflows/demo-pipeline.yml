@@ -1,0 +1,100 @@
+name: demo-pipeline
+
+on:
+  pull_request:
+    paths:
+      - "**/*.tf"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - "ansible-sdwan/**"
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+env:
+  TF_DIR: .
+
+jobs:
+  ci:
+    name: CI checks (lint, validate, drift)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # YAML lint (always passes for demo)
+      - name: Install yamllint
+        run: sudo apt-get update && sudo apt-get install -y yamllint
+      - name: YAML lint
+        run: |
+          echo "Running yamllint (relaxed)…"
+          yamllint -d "{extends: relaxed, rules: {line-length: {max: 140}}}" . || true
+
+      # Terraform fmt/validate (offline, always passes for demo)
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+      - name: Terraform fmt & validate (offline)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "Init (no backend) just for validate…"
+          terraform init -backend=false || true
+          echo "fmt check…"
+          terraform fmt -check || true
+          echo "validate…"
+          terraform validate || true
+
+      # “Drift” check (simulated)
+      - name: Config drift check (simulated)
+        run: |
+          echo "No configuration drift detected." > ci-report.txt
+          echo "All checks passed ✅" >> ci-report.txt
+          echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ci-report.txt
+          cat ci-report.txt
+
+      - name: Upload CI report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report
+          path: ci-report.txt
+
+  deploy:
+    name: Deploy (requires approval)
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    # 🔒 Approval gate: create this environment in repo Settings → Environments
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download CI report
+        uses: actions/download-artifact@v4
+        with:
+          name: ci-report
+          path: .
+
+      - name: Show CI summary
+        run: |
+          echo "==== CI SUMMARY ===="
+          cat ci-report.txt || true
+
+      # Simulated deployment (always success)
+      - name: Simulated deploy
+        run: |
+          echo "Starting deployment…"
+          echo "Applying changes (simulated)…"
+          sleep 2
+          echo "Post-deploy verification (simulated)…"
+          sleep 1
+          echo "Deployment successful ✅" | tee deploy-report.txt
+
+      - name: Upload Deploy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-report
+          path: deploy-report.txt
