@@ -8,8 +8,8 @@ sites = {
     resource_group_name = "rg-sdwan-east"
     name_prefix         = "east"
     vnet_cidr           = "10.0.0.0/16"
-    lan_cidr            = "10.0.2.0/24"
     wan_cidr            = "10.0.1.0/24"
+    lan_cidr            = "10.0.2.0/24"
   }
   west = {
     location            = "westus"

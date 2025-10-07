@@ -21,3 +21,21 @@ variable "vm_size" {
 variable "ssh_public_key" {
   type = string
 }
+
+variable "custom_data_path" {
+  type    = string
+  default = ""
+}
+
+variable "sites" {
+  description = "Per-site settings"
+  type = map(object({
+    location            = string
+    resource_group_name = string
+    name_prefix         = string
+    vnet_cidr           = string
+    wan_cidr            = string
+    lan_cidr            = string
+    # add more per-site fields if your modules expect them (e.g., vm_size)
+  }))
+}
