@@ -5,7 +5,7 @@ variable "location" {
 
 variable "resource_group_name" {
   type    = string
-  default = "rg-sdwan-sim"
+  default = "rg-sdwan-vnf"
 }
 
 variable "vm_admin_username" {
