@@ -65,7 +65,7 @@ resource "azurerm_network_interface" "lan" {
 
 # The VM with both NICs attached
 resource "azurerm_linux_virtual_machine" "vm" {
-  name                = "${var.name_prefix}-vm-sdwan-cisco"
+  name                = "${var.name_prefix}-vm-sdwan-Juniper"
   location            = var.location
   resource_group_name = var.resource_group_name
   size                = var.vm_size
